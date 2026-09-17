@@ -1,5 +1,6 @@
 """
-Stahuje ceny denního trhu OTE (EUR/MWh) a kurz ČNB (z kurzovního lístku OTE)
+Stahuje ceny denního trhu OTE (EUR/MWh), kurz ČNB (z kurzovního lístku OTE)
+a výrobu elektřiny v ČR (Energy-Charts, Fraunhofer ISE – data původem z ENTSO-E)
 a ukládá je do docs/data/ote_RRRR.json. Spouští GitHub Actions dvakrát denně.
 
 - doplní chybějící dny od 1. 1. 2025 do zítřka (pokud už je zveřejněn)
@@ -23,6 +24,10 @@ START = dt.date(2025, 1, 1)
 OTE = "https://www.ote-cr.cz"
 DATA = Path(__file__).resolve().parent.parent / "docs" / "data"
 HEADERS = {"User-Agent": "spot-ceny-dashboard (GitHub Actions; osobni projekt)"}
+ENERGY_CHARTS = "https://api.energy-charts.info/public_power"
+GEN_SERIES = {"solar": ["Solar"], "wind": ["Wind onshore", "Wind offshore"], "load": ["Load"],
+              "nuclear": ["Nuclear"],
+              "fossil": ["Fossil brown coal / lignite", "Fossil hard coal", "Fossil oil", "Fossil gas"]}
 
 session = requests.Session()
 session.headers.update(HEADERS)
@@ -107,6 +112,73 @@ def rate_for(rates, d):
     return rates[earlier[-1]], earlier[-1], True
 
 
+def fetch_generation(months):
+    """Výroba po 15 minutách po měsících. Energy-Charts občas vrací 429, proto pomalu a s opakováním."""
+    out = {}
+    for (y, m) in sorted(months):
+        last = (dt.date(y + (m == 12), (m % 12) + 1, 1) - dt.timedelta(days=1)).day
+        params = {"country": "cz", "start": f"{y}-{m:02d}-01", "end": f"{y}-{m:02d}-{last}"}
+        r = None
+        for attempt in range(6):                    # Energy-Charts občas odpoví 429, počkáme a zkusíme znovu
+            r = get(ENERGY_CHARTS, params=params)
+            if r is not None:
+                break
+            time.sleep(20 * (attempt + 1))
+        if r is None:
+            print(f"  výroba {y}-{m:02d}: nedostupná, doplní se příště")
+            continue
+        try:
+            j = r.json()
+        except ValueError:
+            continue
+        series = {p.get("name"): p.get("data", []) for p in j.get("production_types", [])}
+        stamps = j.get("unix_seconds", [])
+        for i, ts in enumerate(stamps):
+            day = dt.datetime.fromtimestamp(ts, TZ).date().isoformat()
+            g = out.setdefault(day, {k: [] for k in GEN_SERIES})
+            for key, names in GEN_SERIES.items():
+                vals = [series.get(n, [])[i] for n in names if i < len(series.get(n, []))]
+                vals = [v for v in vals if v is not None]
+                g[key].append(round(sum(vals)) if vals else None)
+        time.sleep(5)
+    return out
+
+
+def fetch_germany(months):
+    """Německé denní průměry (slunce, vítr, spotřeba) – kontext pro vysvětlení cen."""
+    out = {}
+    for (y, m) in sorted(months):
+        last = (dt.date(y + (m == 12), (m % 12) + 1, 1) - dt.timedelta(days=1)).day
+        params = {"country": "de", "start": f"{y}-{m:02d}-01", "end": f"{y}-{m:02d}-{last}"}
+        r = None
+        for attempt in range(6):                    # Energy-Charts občas odpoví 429, počkáme a zkusíme znovu
+            r = get(ENERGY_CHARTS, params=params)
+            if r is not None:
+                break
+            time.sleep(20 * (attempt + 1))
+        if r is None:
+            continue
+        try:
+            j = r.json()
+        except ValueError:
+            continue
+        series = {p.get("name"): p.get("data", []) for p in j.get("production_types", [])}
+        acc = {}
+        for i, ts in enumerate(j.get("unix_seconds", [])):
+            day = dt.datetime.fromtimestamp(ts, TZ).date().isoformat()
+            a = acc.setdefault(day, {"solar": 0.0, "wind": 0.0, "load": 0.0, "n": 0})
+            val = lambda name: (series.get(name, [None] * (i + 1))[i] or 0)
+            a["solar"] += val("Solar")
+            a["wind"] += val("Wind onshore") + val("Wind offshore")
+            a["load"] += val("Load")
+            a["n"] += 1
+        for day, a in acc.items():
+            if a["n"]:
+                out[day] = {"solar": round(a["solar"] / a["n"]), "wind": round(a["wind"] / a["n"]), "load": round(a["load"] / a["n"])}
+        time.sleep(5)
+    return out
+
+
 def main():
     today = dt.datetime.now(TZ).date()
     tomorrow = today + dt.timedelta(days=1)
@@ -152,6 +224,47 @@ def main():
             changed += 1
             print(f"  {key}: {len(eur)} period, kurz {ri[0]}{' (předběžný)' if ri[2] else ''}")
 
+    # --- výroba (slunce, vítr, spotřeba, jádro, fosilní zdroje) ---
+    gen = {}
+    for y in range(START.year, tomorrow.year + 1):
+        f = DATA / f"gen_{y}.json"
+        gen[y] = json.loads(f.read_text()) if f.exists() else {}
+    months = set()
+    d = START
+    while d <= today:
+        if d.isoformat() not in gen[d.year] or d >= today - dt.timedelta(days=3):
+            months.add((d.year, d.month))     # měsíc doplníme celý; poslední dny se ještě dopřesňují
+        d += dt.timedelta(days=1)
+    if months:
+        print(f"Výroba – měsíce ke stažení: {len(months)}")
+        for day, g in fetch_generation(months).items():
+            y = int(day[:4])
+            if y in gen:
+                gen[y][day] = g
+        for y, content in gen.items():
+            if content:
+                (DATA / f"gen_{y}.json").write_text(json.dumps(dict(sorted(content.items())), separators=(",", ":")))
+
+    # --- Německo (denní průměry) ---
+    de = {}
+    for y in range(START.year, tomorrow.year + 1):
+        f = DATA / f"gen_de_{y}.json"
+        de[y] = json.loads(f.read_text()) if f.exists() else {}
+    de_months = set()
+    d = START
+    while d <= today:
+        if d.isoformat() not in de[d.year] or d >= today - dt.timedelta(days=3):
+            de_months.add((d.year, d.month))
+        d += dt.timedelta(days=1)
+    if de_months:
+        for day, g in fetch_germany(de_months).items():
+            y = int(day[:4])
+            if y in de:
+                de[y][day] = g
+        for y, content in de.items():
+            if content:
+                (DATA / f"gen_de_{y}.json").write_text(json.dumps(dict(sorted(content.items())), separators=(",", ":")))
+
     for y, content in store.items():
         if content:
             ordered = dict(sorted(content.items()))
@@ -159,6 +272,7 @@ def main():
     (DATA / "meta.json").write_text(json.dumps({
         "updated": dt.datetime.now(TZ).isoformat(timespec="minutes"),
         "changedDays": changed,
+        "genDays": sum(len(v) for v in gen.values()),
     }))
     print(f"Změněno dní: {changed}")
     return 0
