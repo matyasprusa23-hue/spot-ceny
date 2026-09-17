@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spotové ceny elektřiny</title>
+<meta name="description" content="Nejdražší a nejlevnější dvě hodiny na denním trhu s elektřinou v ČR – denně z dat OTE.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">⚡ Spot</a>
+    <div class="nav-links">
+      <a href="#den">Den</a>
+      <a href="#vyvoj">Vývoj</a>
+      <a href="#extremy">Extrémy</a>
+      <a href="#trend">Trend</a>
+      <a href="#vzorce">Vzorce</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-tabs" role="tablist" id="heroTabs"></div>
+    <h1 class="hero-date" id="heroDate">Načítám…</h1>
+    <p class="hero-sub">Nejdražší dvě hodiny na denním trhu s elektřinou v ČR</p>
+    <div class="hero-grid">
+      <div class="hero-card" id="heroAm">
+        <div class="label"><span class="dot am"></span>Dopoledne</div>
+        <div class="window">–</div>
+        <div class="big">–</div>
+        <div class="unit">Kč/MWh <span class="kwh"></span></div>
+      </div>
+      <div class="hero-card" id="heroPm">
+        <div class="label"><span class="dot pm"></span>Odpoledne</div>
+        <div class="window">–</div>
+        <div class="big">–</div>
+        <div class="unit">Kč/MWh <span class="kwh"></span></div>
+      </div>
+      <div class="hero-card soft" id="heroCheap">
+        <div class="label"><span class="dot cheap"></span>Nejlevnější 2 h</div>
+        <div class="window">–</div>
+        <div class="big">–</div>
+        <div class="unit">Kč/MWh <span class="kwh"></span></div>
+      </div>
+    </div>
+    <p class="hero-note" id="heroNote"></p>
+  </section>
+
+  <!-- DETAIL DNE -->
+  <section class="section" id="den">
+    <div class="section-head">
+      <div>
+        <h2>Průběh dne</h2>
+        <p class="lead">Cena po 15 minutách. Barevně zvýrazněná okna jsou nejdražší dvě hodiny dopoledne a odpoledne a nejlevnější dvě hodiny dne. Šedá čára ukazuje obvyklý průběh za posledních 30 dní.</p>
+      </div>
+      <div class="controls">
+        <button class="btn icon" id="dayPrev" aria-label="Předchozí den">‹</button>
+        <input type="date" id="dayPicker" class="date">
+        <button class="btn icon" id="dayNext" aria-label="Další den">›</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="day-stats" id="dayStats"></div>
+      <div id="chartDay" class="chart h420" role="img" aria-label="Graf cen vybraného dne po 15 minutách"></div>
+      <div class="legend" id="dayLegend">
+        <span><i class="sw am"></i>Nejdražší 2 h dopoledne</span>
+        <span><i class="sw pm"></i>Nejdražší 2 h odpoledne</span>
+        <span><i class="sw cheap"></i>Nejlevnější 2 h</span>
+        <span><i class="sw bar"></i>Ostatní čtvrthodiny</span>
+        <span><i class="sw dash"></i>Obvyklý průběh (30 dní)</span>
+      </div>
+      <p class="note" id="dayNote"></p>
+    </div>
+  </section>
+
+  <!-- VÝVOJ -->
+  <section class="section" id="vyvoj">
+    <div class="section-head">
+      <div>
+        <h2>Vývoj špiček</h2>
+        <p class="lead">Průměr nejdražšího dvouhodinového okna každý den. Tenké body jsou jednotlivé dny, silná čára je 7denní klouzavý průměr. Kliknutím na den zobrazíte jeho průběh.</p>
+      </div>
+      <div class="seg" id="rangeSeg">
+        <button data-r="14">14 dní</button>
+        <button data-r="90" class="on">3 měsíce</button>
+        <button data-r="365">Rok</button>
+        <button data-r="all">Vše</button>
+      </div>
+    </div>
+    <div class="card">
+      <div id="chartTrend" class="chart h400" role="img" aria-label="Vývoj dopoledních a odpoledních špiček"></div>
+      <div class="legend">
+        <span><i class="sw am"></i>Dopoledne</span>
+        <span><i class="sw pm"></i>Odpoledne</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- EXTRÉMY -->
+  <section class="section" id="extremy">
+    <div class="section-head">
+      <div>
+        <h2>Extrémy</h2>
+        <p class="lead">Nejdražší a nejlevnější souvislé dvě hodiny v období. Důvody jsou odhad z průběhu cen, kalendáře a sezóny.</p>
+      </div>
+      <div class="seg" id="extSeg">
+        <button data-n="14" class="on">14 dní</button>
+        <button data-n="30">30 dní</button>
+      </div>
+    </div>
+    <div class="ext-grid" id="extGrid"></div>
+  </section>
+
+  <!-- TREND -->
+  <section class="section" id="trend">
+    <div class="section-head">
+      <div>
+        <h2>Trend</h2>
+        <p class="lead" id="trendText"></p>
+      </div>
+    </div>
+    <div class="trend-grid" id="trendGrid"></div>
+  </section>
+
+  <!-- VZORCE -->
+  <section class="section" id="vzorce">
+    <div class="section-head">
+      <div>
+        <h2>Mapa cen</h2>
+        <p class="lead">Každý řádek je den (nejnovější nahoře), každý sloupec čtvrthodina. Modrá znamená zápornou cenu, sytě červená nejdražší chvíle. Je tu vidět polední solární propad v létě i večerní špičky v zimě.</p>
+      </div>
+      <div class="seg" id="heatSeg">
+        <button data-r="120" class="on">4 měsíce</button>
+        <button data-r="all">Vše</button>
+      </div>
+    </div>
+    <div class="card">
+      <div id="chartHeat" class="chart h640" role="img" aria-label="Teplotní mapa cen po dnech a čtvrthodinách"></div>
+    </div>
+
+    <div class="two">
+      <div>
+        <h3>Kdy bývá nejdráž</h3>
+        <p class="lead small">V kolik hodin začíná nejdražší dvouhodinové okno, počet dní.</p>
+        <div class="card">
+          <div class="seg small" id="whenSeg">
+            <button data-r="90" class="on">3 měsíce</button>
+            <button data-r="all">Vše</button>
+          </div>
+          <div id="chartWhen" class="chart h320" role="img" aria-label="Rozložení začátků nejdražších oken podle hodiny"></div>
+          <div class="legend">
+            <span><i class="sw am"></i>Dopoledne</span>
+            <span><i class="sw pm"></i>Odpoledne</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>Pracovní dny vs. víkend</h3>
+        <p class="lead small">Průměrný průběh ceny za posledních 90 dní.</p>
+        <div class="card">
+          <div class="seg small" style="visibility:hidden"><button>.</button></div>
+          <div id="chartWeek" class="chart h320" role="img" aria-label="Průměrný denní profil v pracovní dny a o víkendu"></div>
+          <div class="legend">
+            <span><i class="sw work"></i>Pracovní dny</span>
+            <span><i class="sw weekend"></i>Víkendy a svátky</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two">
+      <div>
+        <h3>Hodiny se zápornou cenou</h3>
+        <p class="lead small">Součet hodin v měsíci, kdy byla cena pod nulou.</p>
+        <div class="card">
+          <div id="chartNeg" class="chart h320" role="img" aria-label="Počet hodin se zápornou cenou po měsících"></div>
+          <div class="legend" id="negLegend"></div>
+        </div>
+      </div>
+      <div>
+        <h3>Odpolední špička po měsících</h3>
+        <p class="lead small">Průměr nejdražšího odpoledního okna, srovnání let.</p>
+        <div class="card">
+          <div id="chartMonth" class="chart h320" role="img" aria-label="Měsíční průměr odpolední špičky po letech"></div>
+          <div class="legend" id="monthLegend"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p><strong>Jak se to počítá.</strong> Ceny denního trhu OTE, a.s. (bez DPH a poplatků) přepočtené kurzem ČNB pro den dodávky. Od 1. 10. 2025 po 15 minutách (okno = 8 čtvrthodin), dříve po hodinách (okno = 2 hodiny). Okna nepřesahují poledne. Časy jsou v místním čase včetně přechodu na letní čas.</p>
+    <p id="updated"></p>
+    <p class="muted">Zdroj: <a href="https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh" target="_blank" rel="noopener">OTE – denní trh</a> · kurz <a href="https://www.cnb.cz" target="_blank" rel="noopener">ČNB</a> · grafy Apache ECharts</p>
+  </footer>
+</main>
+
+<script src="vendor/echarts.min.js"></script>
+<script src="analysis.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
