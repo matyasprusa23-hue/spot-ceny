@@ -183,6 +183,21 @@
     return r.slice(0, 4);
   }
 
+
+  // srovnání okna s mediánem stejného okna za posledních 30 dní a se včerejškem
+  function compare(all, day, kind) {
+    var w = day[kind];
+    if (!w) return null;
+    var prev = all.days.slice(Math.max(0, day.i - 30), day.i);
+    var med = median(prev.map(function (d) { return d[kind] ? d[kind].czk : null; }));
+    var yest = all.days[day.i - 1];
+    var y = yest && yest[kind] ? yest[kind].czk : null;
+    return {
+      normal: med, normalPct: med ? pct(w.czk, med) : null, normalDays: prev.length,
+      yesterday: y, yesterdayPct: y ? pct(w.czk, y) : null, yesterdayDate: yest ? yest.date : null
+    };
+  }
+
   // nejvyšší / nejnižší 2h okno v posledních n dnech (do lastDate včetně)
   function extremes(all, lastDate, n) {
     var end = all.byDate[lastDate];
@@ -268,7 +283,7 @@
 
   var api = {
     TZ: TZ, hm: hm, addDays: addDays, weekday: weekday, isHoliday: isHoliday, easterSunday: easterSunday,
-    buildDay: buildDay, buildAll: buildAll, quarterGrid: quarterGrid, peakOf: peakOf, extremes: extremes,
+    buildDay: buildDay, buildAll: buildAll, compare: compare, quarterGrid: quarterGrid, peakOf: peakOf, extremes: extremes,
     trends: trends, movingAvg: movingAvg, profile: profile, median: median, mean: mean,
     reasonsHigh: reasonsHigh, reasonsLow: reasonsLow, fmtKc: fmtKc, MONTHS_GEN: MONTHS_GEN, DAYS: DAYS
   };

@@ -21,7 +21,7 @@
       <a href="#vyvoj">Vývoj</a>
       <a href="#extremy">Extrémy</a>
       <a href="#trend">Trend</a>
-      <a href="#vzorce">Vzorce</a>
+      <a href="#vzorce">Mapa cen</a>
     </div>
   </div>
 </nav>
@@ -38,21 +38,25 @@
         <div class="window">–</div>
         <div class="big">–</div>
         <div class="unit">Kč/MWh <span class="kwh"></span></div>
+        <div class="cmp"></div>
       </div>
       <div class="hero-card" id="heroPm">
         <div class="label"><span class="dot pm"></span>Odpoledne</div>
         <div class="window">–</div>
         <div class="big">–</div>
         <div class="unit">Kč/MWh <span class="kwh"></span></div>
+        <div class="cmp"></div>
       </div>
       <div class="hero-card soft" id="heroCheap">
         <div class="label"><span class="dot cheap"></span>Nejlevnější 2 h</div>
         <div class="window">–</div>
         <div class="big">–</div>
         <div class="unit">Kč/MWh <span class="kwh"></span></div>
+        <div class="cmp"></div>
       </div>
     </div>
     <p class="hero-note" id="heroNote"></p>
+    <p class="freshness" id="freshness"></p>
   </section>
 
   <!-- DETAIL DNE -->
@@ -194,6 +198,22 @@
           <div class="legend" id="monthLegend"></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="section" id="export">
+    <div class="section-head">
+      <div>
+        <h2>Export dat</h2>
+        <p class="lead">Tabulka s okny a průměrnými cenami za vybrané období. Soubor se otevře v Excelu i v Google Tabulkách.</p>
+      </div>
+    </div>
+    <div class="card export-card">
+      <label>Od <input type="date" id="expFrom" class="date"></label>
+      <label>Do <input type="date" id="expTo" class="date"></label>
+      <button class="btn primary" id="expBtn">Stáhnout pro Excel (CSV)</button>
+      <button class="btn ghost" id="expDay">Průběh vybraného dne po 15 min</button>
+      <span class="note" id="expNote"></span>
     </div>
   </section>
 

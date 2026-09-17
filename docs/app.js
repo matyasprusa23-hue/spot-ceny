@@ -84,21 +84,56 @@
       setDay(b.dataset.d);
     };
   }
-  function fillHero(id, w) {
+  function chip(label, value, p, title) {
+    if (p === null || p === undefined || isNaN(p)) return '';
+    var flat = Math.abs(p) < 3;
+    var cls = flat ? 'flat' : p > 0 ? 'up' : 'down';
+    var head = flat ? 'stejné' : (p > 0 ? '+' : '−') + Math.round(Math.abs(p)) + ' %';
+    return '<span class="chip ' + cls + '" title="' + esc(title || '') + '"><b>' + head + '</b> ' +
+      (flat ? 'jako ' : 'proti ') + label + ' (' + kc(value) + ' Kč)</span>';
+  }
+  function fillHero(id, w, cmp) {
     var el = $(id);
     el.querySelector('.window').textContent = w ? w.label : 'bez dat';
     el.querySelector('.big').textContent = w ? kc(w.czk) : '–';
     el.querySelector('.kwh').textContent = w ? '· ' + kwh(w.czk) : '';
+    var box = el.querySelector('.cmp');
+    if (!box) return;
+    box.innerHTML = (w && cmp)
+      ? chip('obvyklé ceně', cmp.normal, cmp.normalPct, 'Medián stejného okna za posledních ' + cmp.normalDays + ' dní') +
+        chip('včerejšku', cmp.yesterday, cmp.yesterdayPct, cmp.yesterdayDate ? 'Stejné okno ' + shortDate(cmp.yesterdayDate) : '')
+      : '';
   }
   function renderHero() {
     var d = state.all.byDate[state.heroDate];
     $('heroDate').textContent = cap(longDate(d.date));
-    fillHero('heroAm', d.am); fillHero('heroPm', d.pm); fillHero('heroCheap', d.cheap);
+    fillHero('heroAm', d.am, A.compare(state.all, d, 'am'));
+    fillHero('heroPm', d.pm, A.compare(state.all, d, 'pm'));
+    fillHero('heroCheap', d.cheap, A.compare(state.all, d, 'cheap'));
     var notes = [];
     if (d.provisional) notes.push('Předběžný přepočet – kurz ČNB pro tento den ještě nebyl vyhlášen (použit kurz ' + shortDate(d.rateDate) + ').');
     if (!d.complete) notes.push('Neúplná data OTE pro tento den.');
-    if (state.heroDate === state.today && !state.all.byDate[A.addDays(state.today, 1)]) notes.push('Ceny na zítřek OTE zveřejňuje kolem 13:00.');
     $('heroNote').textContent = notes.join(' ');
+    tomorrowCountdown();
+  }
+
+  // odpočet do zveřejnění cen na zítřek (OTE kolem 13:00)
+  var cdTimer = null;
+  function tomorrowCountdown() {
+    var tabs = $('heroTabs'), has = !!state.all.byDate[A.addDays(state.today, 1)];
+    var el = tabs.querySelector('.countdown');
+    if (has) { if (el) el.remove(); if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } return; }
+    if (!el) { el = document.createElement('span'); el.className = 'chip countdown'; tabs.parentNode.insertBefore(el, tabs.nextSibling); }
+    var tick = function () {
+      var now = new Date();
+      var parts = new Intl.DateTimeFormat('en-GB', { timeZone: A.TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now).split(':');
+      var mins = 13 * 60 - (+parts[0] * 60 + +parts[1]);
+      el.textContent = mins > 0
+        ? 'Ceny na zítřek OTE zveřejní kolem 13:00, tedy zhruba za ' + (mins >= 60 ? Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min' : mins + ' min') + '.'
+        : 'Ceny na zítřek se obvykle objeví po 13:00, web si je načte při další aktualizaci.';
+    };
+    tick();
+    if (!cdTimer) cdTimer = setInterval(tick, 60000);
   }
 
   // ---------- DETAIL DNE ----------
@@ -107,6 +142,9 @@
     if (!all.byDate[date]) return;
     state.dayDate = date;
     $('dayPicker').value = date;
+    if (window.history && history.replaceState) {
+      history.replaceState(null, '', location.pathname + '?den=' + date + location.hash);
+    }
     renderDay();
     if (scroll) $('den').scrollIntoView({ behavior: 'smooth' });
   }
@@ -403,6 +441,71 @@
     mk('chartMonth', pk, function (v) { return kc(v); }, 'Kč/MWh');
   }
 
+  // ---------- stáří dat ----------
+  function renderFreshness(meta) {
+    var el = $('freshness');
+    var last = state.all.days[state.all.days.length - 1].date;
+    var lag = Math.round((Date.parse(last) - Date.parse(state.today)) / 86400000);
+    var txt = '', stale = false;
+    if (meta && meta.updated) {
+      var u = new Date(meta.updated);
+      var ageH = (Date.now() - u.getTime()) / 3600000;
+      txt = 'Data aktualizována ' + u.toLocaleString('cs-CZ', { timeZone: A.TZ, day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+      stale = ageH > 26 || lag < 0;
+      if (stale) txt += ' – aktualizace možná selhala, data nemusí být platná';
+      $('updated').textContent = 'Data aktualizována ' + u.toLocaleString('cs-CZ', { timeZone: A.TZ, day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) +
+        '. Poslední den v datech: ' + shortDate(last) + '.';
+    } else {
+      txt = 'Poslední den v datech: ' + shortDate(last);
+      stale = lag < 0;
+    }
+    el.className = 'freshness' + (stale ? ' stale' : '');
+    el.innerHTML = '<span class="led"></span>' + esc(txt);
+  }
+
+  // ---------- export ----------
+  function download(name, text) {
+    var blob = new Blob(['\ufeff' + text], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  var csvNum = function (v) { return v === null || v === undefined || isNaN(v) ? '' : (Math.round(v * 100) / 100).toString().replace('.', ','); };
+  function exportRange() {
+    var from = $('expFrom').value, to = $('expTo').value;
+    if (!from || !to || from > to) { $('expNote').textContent = 'Zadej platné období.'; return; }
+    var rows = [['Datum', 'Den', 'Dopoledne – okno', 'Dopoledne Kč/MWh', 'Odpoledne – okno', 'Odpoledne Kč/MWh',
+      'Nejlevnější 2 h – okno', 'Nejlevnější 2 h Kč/MWh', 'Průměr dne Kč/MWh', 'Minimum Kč/MWh', 'Maximum Kč/MWh',
+      'Hodiny se zápornou cenou', 'Kurz CZK/EUR', 'Data OTE', 'Poznámka']];
+    state.all.days.filter(function (d) { return d.date >= from && d.date <= to; }).forEach(function (d) {
+      var notes = [];
+      if (d.provisional) notes.push('předběžný kurz (' + d.rateDate + ')');
+      if (!d.complete) notes.push('neúplná data OTE');
+      if (d.hours !== 24) notes.push('přechod času, ' + d.hours + ' h');
+      if (d.holiday) notes.push('státní svátek');
+      rows.push([shortDate(d.date), A.DAYS[d.weekday],
+        d.am ? d.am.label : '', csvNum(d.am && d.am.czk), d.pm ? d.pm.label : '', csvNum(d.pm && d.pm.czk),
+        d.cheap.label, csvNum(d.cheap.czk), csvNum(d.avg), csvNum(d.min), csvNum(d.max),
+        csvNum(d.negHours), csvNum(d.rate), d.res + ' min', notes.join('; ')]);
+    });
+    if (rows.length === 1) { $('expNote').textContent = 'V tomto období nejsou žádná data.'; return; }
+    download('spot-ceny_' + from + '_' + to + '.csv', rows.map(function (r) { return r.join(';'); }).join('\r\n'));
+    $('expNote').textContent = (rows.length - 1) + ' dní staženo.';
+  }
+  function exportDay() {
+    var d = state.all.byDate[state.dayDate];
+    var rows = [['Datum', 'Od', 'Do', 'Cena Kč/MWh', 'Cena EUR/MWh', 'Okno']];
+    var inW = function (w, i) { return w && i >= w.startIdx && i <= w.endIdx; };
+    d.slots.forEach(function (s, i) {
+      rows.push([shortDate(d.date), s.hm, s.endHM === '00:00' ? '24:00' : s.endHM, csvNum(s.czk), csvNum(s.eur),
+        inW(d.am, i) ? 'nejdražší dopoledne' : inW(d.pm, i) ? 'nejdražší odpoledne' : inW(d.cheap, i) ? 'nejlevnější' : '']);
+    });
+    download('spot-ceny_' + d.date + '_detail.csv', rows.map(function (r) { return r.join(';'); }).join('\r\n'));
+    $('expNote').textContent = 'Staženo: ' + shortDate(d.date) + '.';
+  }
+
   // ---------- ovládání ----------
   function seg(id, key, cb) {
     $(id).onclick = function (e) {
@@ -420,6 +523,13 @@
     $('dayPicker').onchange = function () { setDay(this.value); };
     $('dayPrev').onclick = function () { var d = all.byDate[state.dayDate]; if (d.i > 0) setDay(all.days[d.i - 1].date); };
     $('dayNext').onclick = function () { var d = all.byDate[state.dayDate]; if (d.i < all.days.length - 1) setDay(all.days[d.i + 1].date); };
+    $('expFrom').min = $('expTo').min = all.days[0].date;
+    $('expFrom').max = $('expTo').max = all.days[all.days.length - 1].date;
+    $('expTo').value = all.days[all.days.length - 1].date;
+    $('expFrom').value = A.addDays($('expTo').value, -30);
+    $('expBtn').onclick = exportRange;
+    $('expDay').onclick = exportDay;
+    window.addEventListener('popstate', function () { var d = dayFromUrl(); if (d) setDay(d); });
     seg('rangeSeg', 'range', renderTrendChart);
     seg('extSeg', 'ext', renderExtremes);
     seg('heatSeg', 'heat', renderHeat);
@@ -427,6 +537,10 @@
     window.addEventListener('resize', function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
   }
 
+  function dayFromUrl() {
+    var m = /[?&]den=(\d{4}-\d{2}-\d{2})/.exec(location.search);
+    return m ? m[1] : null;
+  }
   function start() {
     load().then(function (r) {
       state.all = A.buildAll(r.files);
@@ -434,13 +548,11 @@
       state.today = pragueToday();
       renderHeroTabs(); renderHero();
       bind();
-      setDay(state.heroDate);
+      var urlDay = dayFromUrl();
+      setDay(urlDay && state.all.byDate[urlDay] ? urlDay : state.heroDate);
       renderTrendChart(); renderExtremes(); renderTrend();
       renderHeat(); renderWhen(); renderWeek(); renderMonths();
-      if (r.meta && r.meta.updated) {
-        var u = new Date(r.meta.updated);
-        $('updated').textContent = 'Data aktualizována ' + u.toLocaleString('cs-CZ', { timeZone: A.TZ, day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + '.';
-      }
+      renderFreshness(r.meta);
     }).catch(function (e) {
       console.error(e);
       $('heroDate').textContent = 'Chyba při načítání dat';

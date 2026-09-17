@@ -68,6 +68,15 @@ main { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
 .hero-card .unit { color: var(--text-2); font-size: 15px; margin-top: 4px; }
 .hero-card .kwh { color: var(--text-3); margin-left: 6px; }
 .hero-note { color: var(--text-3); font-size: 14px; margin-top: 18px; min-height: 1em; }
+.freshness { color: var(--text-3); font-size: 13px; margin: 6px 0 0; display: inline-flex; align-items: center; gap: 8px; }
+.freshness .led { width: 7px; height: 7px; border-radius: 50%; background: var(--cheap); display: inline-block; }
+.freshness.stale { color: #e0a33e; }
+.freshness.stale .led { background: #e0a33e; }
+.hero-card .cmp { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 13px; color: var(--text-2); background: rgba(255,255,255,.06); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.chip b { font-weight: 600; }
+.chip.up b { color: var(--up); } .chip.down b { color: var(--down); } .chip.flat b { color: var(--text); }
+.countdown { color: var(--text-2); }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.am { background: var(--am); } .dot.pm { background: var(--pm); } .dot.cheap { background: var(--cheap); }
 
@@ -125,6 +134,14 @@ h3 { font-size: 24px; margin: 40px 0 4px; letter-spacing: -0.01em; font-weight: 
 .ext li { color: var(--text-2); padding: 8px 0 8px 22px; border-top: 1px solid var(--line); position: relative; font-size: 15px; }
 .ext li::before { content: "→"; position: absolute; left: 0; color: var(--text-3); }
 .ext .hint { color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+/* EXPORT */
+.export-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 22px; }
+.export-card label { color: var(--text-2); font-size: 14px; display: inline-flex; align-items: center; gap: 8px; }
+.btn.primary { background: var(--accent); color: #fff; padding: 9px 18px; font-size: 15px; font-weight: 500; }
+.btn.primary:hover { background: #4aa8ff; }
+.btn.ghost { padding: 9px 18px; font-size: 15px; }
+#expNote { margin: 0; }
 
 /* TREND */
 #trendText { color: var(--text); font-size: 21px; line-height: 1.4; max-width: 900px; }
