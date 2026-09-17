@@ -5,6 +5,7 @@
   var C = {
     text: '#f5f5f7', text2: '#a1a1a6', text3: '#6e6e73', grid: '#26262a', surface: '#161618',
     am: '#3987e5', pm: '#d95926', cheap: '#199e70', bar: '#4a4a4f', work: '#c3c2b7', weekend: '#d55181',
+    solar: '#c98500', wind: '#3987e5', nuclear: '#6e6e73', fossil: '#8a5a44', load: '#f5f5f7',
     y1: '#6e6e73', y2: '#f5f5f7', y3: '#3987e5'
   };
   var MONTHS = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
@@ -55,13 +56,17 @@
     var years = [];
     var until = pragueToday().slice(5, 7) === '12' ? year + 1 : year;
     for (var y = 2025; y <= until; y++) years.push(y);
-    return Promise.all(years.map(function (y) {
-      return fetch('data/ote_' + y + '.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
-    }).concat([fetch('data/meta.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; })]))
-      .then(function (res) {
-        var meta = res.pop();
-        return { files: res, meta: meta };
-      });
+    var json = function (url) {
+      return fetch(url, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
+    };
+    return Promise.all([
+      Promise.all(years.map(function (y) { return json('data/ote_' + y + '.json'); })),
+      Promise.all(years.map(function (y) { return json('data/gen_' + y + '.json'); })),
+      Promise.all(years.map(function (y) { return json('data/gen_de_' + y + '.json'); })),
+      json('data/meta.json')
+    ]).then(function (res) {
+      return { files: res[0], gen: res[1], de: res[2], meta: res[3] };
+    });
   }
 
   // ---------- HERO ----------
@@ -176,6 +181,7 @@
     $('dayNote').textContent = notes.join(' ');
 
     var every = d.res === 15 ? 7 : 1;
+    renderGen();
     chart('chartDay').setOption(Object.assign({}, base, {
       grid: { left: 64, right: 16, top: 16, bottom: 34 },
       tooltip: Object.assign({}, base.tooltip, {
@@ -199,6 +205,59 @@
         { type: 'line', name: 'Obvyklý průběh', data: typical, showSymbol: false, smooth: true,
           lineStyle: { color: C.text3, width: 2, type: 'dashed' }, z: 5 }
       ]
+    }), true);
+  }
+
+  // ---------- VÝROBA ----------
+  function renderGen() {
+    var d = state.all.byDate[state.dayDate];
+    var empty = $('genEmpty'), note = $('genNote'), box = $('chartGen'), leg = $('genLegend');
+    if (!d.gen) {
+      if (charts.chartGen) { charts.chartGen.dispose(); delete charts.chartGen; }
+      box.hidden = true; leg.hidden = true; note.textContent = '';
+      empty.hidden = false;
+      var future = d.date > state.today;
+      empty.innerHTML = '<b>Data o výrobě zatím nejsou k dispozici</b>' +
+        (future ? 'Výroba se měří průběžně, takže pro budoucí den ještě neexistuje. Objeví se během dne.'
+                : 'Pro tento den je zdroj (Energy-Charts) zatím nedodal. Doplní se při některé z dalších aktualizací.');
+      return;
+    }
+    box.hidden = false; leg.hidden = false; empty.hidden = true;
+    note.textContent = d.gen.partial ? 'Konec dne se ještě dopočítává, poslední hodiny mohou chybět.' : '';
+    var labels = d.slots.map(function (s) { return s.hm; });
+    var series = [
+      { key: 'solar', name: 'Slunce', color: C.solar },
+      { key: 'wind', name: 'Vítr', color: C.wind },
+      { key: 'nuclear', name: 'Jádro', color: C.nuclear },
+      { key: 'fossil', name: 'Uhlí, plyn a ropa', color: C.fossil }
+    ].map(function (x) {
+      return {
+        name: x.name, type: 'line', stack: 'gen', areaStyle: { color: x.color, opacity: .85 },
+        lineStyle: { width: 0 }, symbol: 'none', smooth: false, z: 2,
+        data: d.gen[x.key].map(function (v) { return v === null ? null : Math.round(v); }),
+        itemStyle: { color: x.color }
+      };
+    });
+    series.push({ name: 'Spotřeba', type: 'line', data: d.gen.load.map(function (v) { return v === null ? null : Math.round(v); }),
+      showSymbol: false, lineStyle: { color: C.load, width: 2 }, itemStyle: { color: C.load }, z: 6 });
+    chart('chartGen').setOption(Object.assign({}, base, {
+      grid: { left: 64, right: 16, top: 16, bottom: 34 },
+      tooltip: Object.assign({}, base.tooltip, {
+        trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: C.text3 } },
+        formatter: function (ps) {
+          var i = ps[0].dataIndex;
+          var rows = ps.slice().reverse().map(function (p) {
+            return '<span style="color:' + p.color + '">●</span> ' + p.seriesName + ': ' +
+              (p.value === null || p.value === undefined ? '–' : A.gw(p.value));
+          }).join('<br>');
+          return '<b>' + labels[i] + '</b><br>' + rows;
+        }
+      }),
+      xAxis: axisStyle({ type: 'category', data: labels, boundaryGap: false, splitLine: { show: false },
+        axisLabel: { color: C.text3, fontSize: 12, interval: d.res === 15 ? 7 : 1 } }),
+      yAxis: axisStyle({ type: 'value', axisLabel: { color: C.text3, fontSize: 12,
+        formatter: function (v) { return (v / 1000) + ' GW'; } } }),
+      series: series
     }), true);
   }
 
@@ -270,7 +329,7 @@
         '<div class="val">' + kc(w.czk) + '<small>Kč/MWh</small></div>' +
         '<div class="when"><button data-d="' + d.date + '">' + cap(longDate(d.date)) + '</button> · ' + w.label + ' <span class="muted">(' + which + ')</span></div>' +
         '<ul>' + o.reasons.map(function (r) { return '<li>' + esc(r) + '</li>'; }).join('') + '</ul>' +
-        '<div class="hint">Možné důvody odvozené z průběhu cen, kalendáře a sezóny.</div>' +
+        '<div class="hint">Důvody z dat o výrobě a spotřebě (Energy-Charts) a z průběhu cen. U starších dní, kde výroba chybí, jen z cen.</div>' +
         '</article>';
     };
     $('extGrid').innerHTML = card('hi', x.hi) + card('lo', x.lo);
@@ -544,6 +603,8 @@
   function start() {
     load().then(function (r) {
       state.all = A.buildAll(r.files);
+      A.attachGeneration(state.all, r.gen || []);
+      A.attachGermany(r.de || []);
       if (!state.all.days.length) { $('heroDate').textContent = 'Data se nepodařilo načíst'; return; }
       state.today = pragueToday();
       renderHeroTabs(); renderHero();

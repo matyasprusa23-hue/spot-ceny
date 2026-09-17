@@ -198,6 +198,116 @@
     };
   }
 
+
+  // ---------- výroba (Energy-Charts) ----------
+  var GEN_KEYS = ['solar', 'wind', 'load', 'fossil', 'nuclear'];
+  function attachGeneration(all, files) {
+    var map = {};
+    files.forEach(function (f) { Object.keys(f || {}).forEach(function (d) { map[d] = f[d]; }); });
+    all.days.forEach(function (day) {
+      var g = map[day.date];
+      if (!g || !g.solar || !g.solar.length) { day.gen = null; return; }
+      var per = day.res / 15;                       // hodinová data (2025) = 4 čtvrthodiny na slot
+      var out = {}, ok = false;
+      GEN_KEYS.forEach(function (k) {
+        var src = g[k] || [];
+        out[k] = day.slots.map(function (_, i) {
+          var vals = [];
+          for (var j = 0; j < per; j++) { var v = src[i * per + j]; if (v !== null && v !== undefined) vals.push(v); }
+          return vals.length ? mean(vals) : null;
+        });
+        if (out[k].some(function (v) { return v !== null; })) ok = true;
+      });
+      out.partial = out.solar.filter(function (v) { return v === null; }).length > 0;
+      day.gen = ok ? out : null;
+    });
+    return all;
+  }
+  // průměr série ve zvoleném okně (podle indexů slotů)
+  function winMean(day, key, from, to) {
+    if (!day.gen || !day.gen[key]) return null;
+    return mean(day.gen[key].slice(from, to + 1).filter(function (v) { return v !== null; }));
+  }
+  // obvyklá hodnota ve stejnou denní dobu za posledních 30 dní
+  function usualAt(all, day, key, fromHM, toHM) {
+    var vals = [];
+    all.days.slice(Math.max(0, day.i - 30), day.i).forEach(function (d) {
+      if (!d.gen || !d.gen[key]) return;
+      var sel = [];
+      d.slots.forEach(function (s, i) {
+        if (s.hm >= fromHM && (toHM === '24:00' || s.hm < toHM)) { var v = d.gen[key][i]; if (v !== null) sel.push(v); }
+      });
+      if (sel.length) vals.push(mean(sel));
+    });
+    return vals.length >= 7 ? median(vals) : null;
+  }
+  function gw(v) {
+    if (v === null || v === undefined) return '–';
+    return Math.abs(v) >= 950
+      ? (v / 1000).toLocaleString('cs-CZ', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' GW'
+      : Math.round(v) + ' MW';
+  }
+  function dayMean(day, key) {
+    if (!day.gen || !day.gen[key]) return null;
+    return mean(day.gen[key].filter(function (v) { return v !== null; }));
+  }
+  function usualDay(all, day, key) {
+    var v = all.days.slice(Math.max(0, day.i - 30), day.i).map(function (d) { return dayMean(d, key); })
+      .filter(function (x) { return x !== null; });
+    return v.length >= 7 ? median(v) : null;
+  }
+
+  // Německo – denní průměry (ceny v ČR táhne propojený trh, hlavně německý vítr)
+  var DE = {};
+  function attachGermany(files) {
+    files.forEach(function (f) { Object.keys(f || {}).forEach(function (d) { DE[d] = f[d]; }); });
+  }
+  function germanyReasons(all, day, high) {
+    var g = DE[day.date];
+    if (!g) return [];
+    var prev = all.days.slice(Math.max(0, day.i - 30), day.i).map(function (d) { return DE[d.date]; }).filter(Boolean);
+    if (prev.length < 7) return [];
+    var out = [];
+    [['wind', 'vítr'], ['solar', 'slunce']].forEach(function (x) {
+      var usual = median(prev.map(function (p) { return p[x[0]]; }));
+      if (!usual || usual < 1000) return;
+      var p = pct(g[x[0]], usual);
+      if (Math.abs(p) < 25) return;
+      out.push('v Německu ' + x[1] + ' ' + gw(g[x[0]]) + ', o ' + Math.abs(Math.round(p)) + ' % ' +
+        (p > 0 ? 'nad obvyklými ' : 'pod obvyklými ') + gw(usual) + ' – německá výroba hýbe cenami v celém regionu');
+    });
+    return out.slice(0, high ? 2 : 1);
+  }
+
+  // konkrétní důvody z dat o výrobě; vrací pole vět (může být prázdné)
+  function genReasons(all, day, win, high) {
+    if (!day.gen) return [];
+    var out = [];
+    // vítr a slunce: srovnání celodenní výroby (vítr fouká nezávisle na denní době)
+    [['wind', 'vítr'], ['solar', 'slunce']].forEach(function (x) {
+      var now = dayMean(day, x[0]), usual = usualDay(all, day, x[0]);
+      if (now === null || usual === null || usual < 200) return;  // česká větrná výroba je malá, drobné výkyvy nic neříkají
+      var p = pct(now, usual);
+      if (Math.abs(p) < 20) return;
+      out.push(x[1] + ' za den ' + gw(now) + ', o ' + Math.abs(Math.round(p)) + ' % ' +
+        (p > 0 ? 'nad' : 'pod') + ' obvyklou výrobou (' + gw(usual) + ')');
+    });
+    // spotřeba: srovnání přímo v okně
+    var l = winMean(day, 'load', win.startIdx, win.endIdx), lu = usualAt(all, day, 'load', win.from, win.to);
+    if (l !== null && lu !== null && lu > 500 && Math.abs(pct(l, lu)) >= 5) {
+      var pl = pct(l, lu);
+      out.push('spotřeba v tom okně ' + gw(l) + ', o ' + Math.abs(Math.round(pl)) + ' % ' + (pl > 0 ? 'nad' : 'pod') + ' obvyklou');
+    }
+    // podíl slunce a větru na spotřebě za den
+    var s = dayMean(day, 'solar'), w = dayMean(day, 'wind'), ld = dayMean(day, 'load');
+    if (s !== null && w !== null && ld) {
+      var share = Math.round((s + w) / ld * 100);
+      if (high && share <= 10) out.push('slunce a vítr pokryly za celý den jen ' + share + ' % spotřeby');
+      if (!high && share >= 20) out.push('slunce a vítr pokryly za celý den ' + share + ' % spotřeby');
+    }
+    return out.slice(0, 3);
+  }
+
   // nejvyšší / nejnižší 2h okno v posledních n dnech (do lastDate včetně)
   function extremes(all, lastDate, n) {
     var end = all.byDate[lastDate];
@@ -208,8 +318,10 @@
       [d.am, d.pm].forEach(function (w) { if (w && (!hi || w.czk > hi.win.czk)) hi = { day: d, win: w }; });
       if (!lo || d.cheap.czk < lo.win.czk) lo = { day: d, win: d.cheap };
     });
-    if (hi) hi.reasons = reasonsHigh(all, hi.day, hi.win);
-    if (lo) lo.reasons = reasonsLow(all, lo.day, lo.win);
+    if (hi) hi.reasons = germanyReasons(all, hi.day, true).concat(genReasons(all, hi.day, hi.win, true))
+      .concat(reasonsHigh(all, hi.day, hi.win)).slice(0, 5);
+    if (lo) lo.reasons = germanyReasons(all, lo.day, false).concat(genReasons(all, lo.day, lo.win, false))
+      .concat(reasonsLow(all, lo.day, lo.win)).slice(0, 5);
     return { hi: hi, lo: lo, from: sel[0].date, to: sel[sel.length - 1].date, n: sel.length };
   }
 
@@ -283,7 +395,7 @@
 
   var api = {
     TZ: TZ, hm: hm, addDays: addDays, weekday: weekday, isHoliday: isHoliday, easterSunday: easterSunday,
-    buildDay: buildDay, buildAll: buildAll, compare: compare, quarterGrid: quarterGrid, peakOf: peakOf, extremes: extremes,
+    buildDay: buildDay, buildAll: buildAll, compare: compare, attachGeneration: attachGeneration, attachGermany: attachGermany, germanyReasons: germanyReasons, genReasons: genReasons, GEN_KEYS: GEN_KEYS, gw: gw, dayMean: dayMean, quarterGrid: quarterGrid, peakOf: peakOf, extremes: extremes,
     trends: trends, movingAvg: movingAvg, profile: profile, median: median, mean: mean,
     reasonsHigh: reasonsHigh, reasonsLow: reasonsLow, fmtKc: fmtKc, MONTHS_GEN: MONTHS_GEN, DAYS: DAYS
   };

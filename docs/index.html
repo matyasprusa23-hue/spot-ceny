@@ -84,6 +84,22 @@
       </div>
       <p class="note" id="dayNote"></p>
     </div>
+
+    <div class="card gen-card" id="genCard">
+      <div class="gen-head">
+        <h3 class="inline">Výroba a spotřeba v ten den</h3>
+        <span class="note" id="genNote"></span>
+      </div>
+      <div id="chartGen" class="chart h300" role="img" aria-label="Výroba elektřiny podle zdrojů a spotřeba ve vybraném dni"></div>
+      <div class="legend" id="genLegend">
+        <span><i class="sw solar"></i>Slunce</span>
+        <span><i class="sw wind"></i>Vítr</span>
+        <span><i class="sw nuclear"></i>Jádro</span>
+        <span><i class="sw fossil"></i>Uhlí, plyn a ropa</span>
+        <span><i class="sw load"></i>Spotřeba</span>
+      </div>
+      <div class="empty" id="genEmpty" hidden></div>
+    </div>
   </section>
 
   <!-- VÝVOJ -->
@@ -114,7 +130,7 @@
     <div class="section-head">
       <div>
         <h2>Extrémy</h2>
-        <p class="lead">Nejdražší a nejlevnější souvislé dvě hodiny v období. Důvody jsou odhad z průběhu cen, kalendáře a sezóny.</p>
+        <p class="lead">Nejdražší a nejlevnější souvislé dvě hodiny v období. Důvody vycházejí ze skutečné výroby ze slunce a větru, ze spotřeby a z průběhu cen.</p>
       </div>
       <div class="seg" id="extSeg">
         <button data-n="14" class="on">14 dní</button>
@@ -220,7 +236,8 @@
   <footer class="footer">
     <p><strong>Jak se to počítá.</strong> Ceny denního trhu OTE, a.s. (bez DPH a poplatků) přepočtené kurzem ČNB pro den dodávky. Od 1. 10. 2025 po 15 minutách (okno = 8 čtvrthodin), dříve po hodinách (okno = 2 hodiny). Okna nepřesahují poledne. Časy jsou v místním čase včetně přechodu na letní čas.</p>
     <p id="updated"></p>
-    <p class="muted">Zdroj: <a href="https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh" target="_blank" rel="noopener">OTE – denní trh</a> · kurz <a href="https://www.cnb.cz" target="_blank" rel="noopener">ČNB</a> · grafy Apache ECharts</p>
+    <p><strong>Výroba.</strong> Data o výrobě a spotřebě pocházejí z <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a> (Fraunhofer ISE, licence CC BY 4.0), původním zdrojem je ENTSO-E. Aktualizují se průběžně, takže poslední hodiny a budoucí dny mohou chybět.</p>
+    <p class="muted">Zdroj: <a href="https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh" target="_blank" rel="noopener">OTE – denní trh</a> · kurz <a href="https://www.cnb.cz" target="_blank" rel="noopener">ČNB</a> · výroba <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a> · grafy Apache ECharts</p>
   </footer>
 </main>
 

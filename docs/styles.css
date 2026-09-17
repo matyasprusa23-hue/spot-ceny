@@ -21,6 +21,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 body {
   margin: 0;
@@ -134,6 +135,18 @@ h3 { font-size: 24px; margin: 40px 0 4px; letter-spacing: -0.01em; font-weight: 
 .ext li { color: var(--text-2); padding: 8px 0 8px 22px; border-top: 1px solid var(--line); position: relative; font-size: 15px; }
 .ext li::before { content: "→"; position: absolute; left: 0; color: var(--text-3); }
 .ext .hint { color: var(--text-3); font-size: 12px; margin-top: 10px; }
+
+/* VÝROBA */
+.gen-card { margin-top: 16px; }
+.gen-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+h3.inline { margin: 0; font-size: 19px; }
+.sw.solar { background: #c98500; } .sw.wind { background: #3987e5; }
+.sw.nuclear { background: #6e6e73; } .sw.fossil { background: #8a5a44; }
+.sw.load { height: 0; border-top: 2px solid #f5f5f7; }
+.empty { color: var(--text-2); background: var(--surface-2); border: 1px dashed var(--line); border-radius: 14px;
+  padding: 26px 22px; text-align: center; font-size: 15px; }
+.empty b { color: var(--text); font-weight: 600; display: block; margin-bottom: 4px; }
+.h300 { height: 300px; }
 
 /* EXPORT */
 .export-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-bottom: 22px; }
