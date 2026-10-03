@@ -6,7 +6,7 @@
     text: '#f5f5f7', text2: '#a1a1a6', text3: '#6e6e73', grid: '#26262a', surface: '#161618',
     am: '#3987e5', pm: '#d95926', cheap: '#199e70', bar: '#4a4a4f', work: '#c3c2b7', weekend: '#d55181',
     solar: '#c98500', wind: '#3987e5', nuclear: '#6e6e73', fossil: '#8a5a44', load: '#f5f5f7',
-    y1: '#6e6e73', y2: '#f5f5f7', y3: '#3987e5'
+    y1: '#6e6e73', y2: '#a1a1a6', y3: '#f5f5f7'
   };
   var MONTHS = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
   var charts = {};
@@ -55,7 +55,7 @@
     var year = +pragueToday().slice(0, 4);
     var years = [];
     var until = pragueToday().slice(5, 7) === '12' ? year + 1 : year;
-    for (var y = 2025; y <= until; y++) years.push(y);
+    for (var y = 2024; y <= until; y++) years.push(y);
     var json = function (url) {
       return fetch(url, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : {}; }).catch(function () { return {}; });
     };
@@ -457,9 +457,10 @@
 
   // ---------- MĚSÍCE ----------
   function yearColors(years) {
-    var pal = [C.y1, C.y2, C.y3, C.cheap];
+    // čím novější rok, tím světlejší šedá – letošek je nejvýraznější
+    var pal = [C.y1, C.y2, C.y3];
     var out = {};
-    years.forEach(function (y, i) { out[y] = pal[i % pal.length]; });
+    years.forEach(function (y, i) { out[y] = pal[Math.max(0, pal.length - years.length + i)] || C.y1; });
     return out;
   }
   function renderMonths() {

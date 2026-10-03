@@ -87,7 +87,10 @@
 
     <div class="card gen-card" id="genCard">
       <div class="gen-head">
-        <h3 class="inline">Výroba a spotřeba v ten den</h3>
+        <div>
+          <h3 class="inline">Výroba a spotřeba v ČR v ten den</h3>
+          <p class="note sub">Pouze česká soustava. Německá výroba se používá jen pro vysvětlení extrémů, protože trh je propojený a ceny u nás z velké části určuje německý vítr.</p>
+        </div>
         <span class="note" id="genNote"></span>
       </div>
       <div id="chartGen" class="chart h300" role="img" aria-label="Výroba elektřiny podle zdrojů a spotřeba ve vybraném dni"></div>
@@ -234,7 +237,7 @@
   </section>
 
   <footer class="footer">
-    <p><strong>Jak se to počítá.</strong> Ceny denního trhu OTE, a.s. (bez DPH a poplatků) přepočtené kurzem ČNB pro den dodávky. Od 1. 10. 2025 po 15 minutách (okno = 8 čtvrthodin), dříve po hodinách (okno = 2 hodiny). Okna nepřesahují poledne. Časy jsou v místním čase včetně přechodu na letní čas.</p>
+    <p><strong>Jak se to počítá.</strong> Ceny denního trhu OTE, a.s. (bez DPH a poplatků) přepočtené kurzem ČNB pro den dodávky. Data od 1. 1. 2024. Od 1. 10. 2025 po 15 minutách (okno = 8 čtvrthodin), dříve po hodinách (okno = 2 hodiny). Okna nepřesahují poledne. Časy jsou v místním čase včetně přechodu na letní čas.</p>
     <p id="updated"></p>
     <p><strong>Výroba.</strong> Data o výrobě a spotřebě pocházejí z <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a> (Fraunhofer ISE, licence CC BY 4.0), původním zdrojem je ENTSO-E. Aktualizují se průběžně, takže poslední hodiny a budoucí dny mohou chybět.</p>
     <p class="muted">Zdroj: <a href="https://www.ote-cr.cz/cs/kratkodobe-trhy/elektrina/denni-trh" target="_blank" rel="noopener">OTE – denní trh</a> · kurz <a href="https://www.cnb.cz" target="_blank" rel="noopener">ČNB</a> · výroba <a href="https://energy-charts.info" target="_blank" rel="noopener">Energy-Charts</a> · grafy Apache ECharts</p>

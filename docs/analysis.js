@@ -207,13 +207,19 @@
     all.days.forEach(function (day) {
       var g = map[day.date];
       if (!g || !g.solar || !g.solar.length) { day.gen = null; return; }
-      var per = day.res / 15;                       // hodinová data (2025) = 4 čtvrthodiny na slot
+      // výroba může být po 15 min (od 2025) nebo po hodinách (2024) – přiřadíme ji ke slotům cen podle času
+      var n = g.solar.length;
+      var genStep = Math.round(day.hours * 60 / n) || 15;   // 15 nebo 60 minut (u neúplného dne odhad)
+      if (genStep !== 15 && genStep !== 60) genStep = n > 30 ? 15 : 60;
       var out = {}, ok = false;
       GEN_KEYS.forEach(function (k) {
         var src = g[k] || [];
         out[k] = day.slots.map(function (_, i) {
-          var vals = [];
-          for (var j = 0; j < per; j++) { var v = src[i * per + j]; if (v !== null && v !== undefined) vals.push(v); }
+          var from = i * day.res, to = (i + 1) * day.res, vals = [];
+          for (var j = Math.floor(from / genStep); j * genStep < to; j++) {
+            var v = src[j];
+            if (v !== null && v !== undefined) vals.push(v);
+          }
           return vals.length ? mean(vals) : null;
         });
         if (out[k].some(function (v) { return v !== null; })) ok = true;
