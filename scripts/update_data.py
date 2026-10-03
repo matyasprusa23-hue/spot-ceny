@@ -3,7 +3,7 @@ Stahuje ceny denního trhu OTE (EUR/MWh), kurz ČNB (z kurzovního lístku OTE)
 a výrobu elektřiny v ČR (Energy-Charts, Fraunhofer ISE – data původem z ENTSO-E)
 a ukládá je do docs/data/ote_RRRR.json. Spouští GitHub Actions dvakrát denně.
 
-- doplní chybějící dny od 1. 1. 2025 do zítřka (pokud už je zveřejněn)
+- doplní chybějící dny od 1. 1. 2024 do zítřka (pokud už je zveřejněn)
 - přepočítá dny s předběžným kurzem (kurz ČNB pro den dodávky ještě nebyl vyhlášen)
 - výpočty (okna, statistiky) dělá až web v prohlížeči
 """
@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 TZ = ZoneInfo("Europe/Prague")
-START = dt.date(2025, 1, 1)
+START = dt.date(2024, 1, 1)
 OTE = "https://www.ote-cr.cz"
 DATA = Path(__file__).resolve().parent.parent / "docs" / "data"
 HEADERS = {"User-Agent": "spot-ceny-dashboard (GitHub Actions; osobni projekt)"}
@@ -36,7 +36,7 @@ session.headers.update(HEADERS)
 def get(url, **kw):
     for attempt in range(4):
         try:
-            r = session.get(url, timeout=30, **kw)
+            r = session.get(url, timeout=25, **kw)
             if r.status_code == 200:
                 return r
             print(f"  HTTP {r.status_code} {url}")
@@ -167,7 +167,9 @@ def fetch_germany(months):
         for i, ts in enumerate(j.get("unix_seconds", [])):
             day = dt.datetime.fromtimestamp(ts, TZ).date().isoformat()
             a = acc.setdefault(day, {"solar": 0.0, "wind": 0.0, "load": 0.0, "n": 0})
-            val = lambda name: (series.get(name, [None] * (i + 1))[i] or 0)
+            def val(name, i=i):
+                arr = series.get(name) or []
+                return (arr[i] if i < len(arr) else None) or 0
             a["solar"] += val("Solar")
             a["wind"] += val("Wind onshore") + val("Wind offshore")
             a["load"] += val("Load")
@@ -179,9 +181,17 @@ def fetch_germany(months):
     return out
 
 
-def main():
-    today = dt.datetime.now(TZ).date()
-    tomorrow = today + dt.timedelta(days=1)
+def warn(msg):
+    """Varování viditelné v přehledu běhu na GitHubu (neukončí běh chybou)."""
+    print(f"::warning::{msg}")
+
+
+def save_json(path, content):
+    path.write_text(json.dumps(dict(sorted(content.items())), separators=(",", ":")))
+
+
+def update_prices(today, tomorrow):
+    """Ceny OTE + kurz. Vrací (počet změněných dní, obsah souborů)."""
     store = {}
     for y in range(START.year, tomorrow.year + 1):
         f = DATA / f"ote_{y}.json"
@@ -194,14 +204,22 @@ def main():
         if e is None or e.get("provisional"):
             todo.append(d)
         d += dt.timedelta(days=1)
-    print(f"Ke zpracování: {len(todo)} dní")
+    print(f"Ceny – ke zpracování: {len(todo)} dní")
     if not todo:
-        return 0
+        return 0, store
 
-    rates = load_rates({x.year for x in todo} | {x.year - 1 for x in todo if x.month == 1})
+    try:
+        rates = load_rates({x.year for x in todo} | {x.year - 1 for x in todo if x.month == 1})
+    except Exception as e:                      # poškozený soubor apod.
+        warn(f"Kurzovní lístek nešel zpracovat: {e}")
+        rates = {}
     if not rates:
-        print("Kurzovní lístek se nepodařilo stáhnout.")
-        return 1
+        # záloha: poslední známý kurz z už uložených dat – dny se označí jako předběžné a přepočítají později
+        warn("Kurzovní lístek ČNB od OTE se nepodařilo stáhnout – použit poslední známý kurz (předběžně).")
+        for content in store.values():
+            for e in content.values():
+                if e.get("rateDate") and e.get("rate") and not e.get("provisional"):
+                    rates[e["rateDate"]] = e["rate"]       # skutečné kurzy ČNB z dřívějších běhů
 
     changed = 0
     for d in todo:
@@ -224,57 +242,96 @@ def main():
             changed += 1
             print(f"  {key}: {len(eur)} period, kurz {ri[0]}{' (předběžný)' if ri[2] else ''}")
 
-    # --- výroba (slunce, vítr, spotřeba, jádro, fosilní zdroje) ---
+    for y, content in store.items():
+        if content:
+            save_json(DATA / f"ote_{y}.json", content)
+    return changed, store
+
+
+def months_to_fetch(existing, today, limit):
+    """Měsíce, kterým chybí dny (+ posledních pár dní, které se dopřesňují). Nejnovější mají přednost."""
+    months = set()
+    d = START
+    while d <= today:
+        if d.isoformat() not in existing.get(d.year, {}) or d >= today - dt.timedelta(days=3):
+            months.add((d.year, d.month))
+        d += dt.timedelta(days=1)
+    return sorted(months, reverse=True)[:limit]
+
+
+def update_generation(today, tomorrow):
     gen = {}
     for y in range(START.year, tomorrow.year + 1):
         f = DATA / f"gen_{y}.json"
         gen[y] = json.loads(f.read_text()) if f.exists() else {}
-    months = set()
-    d = START
-    while d <= today:
-        if d.isoformat() not in gen[d.year] or d >= today - dt.timedelta(days=3):
-            months.add((d.year, d.month))     # měsíc doplníme celý; poslední dny se ještě dopřesňují
-        d += dt.timedelta(days=1)
-    if months:
-        print(f"Výroba – měsíce ke stažení: {len(months)}")
-        for day, g in fetch_generation(months).items():
-            y = int(day[:4])
-            if y in gen:
-                gen[y][day] = g
-        for y, content in gen.items():
-            if content:
-                (DATA / f"gen_{y}.json").write_text(json.dumps(dict(sorted(content.items())), separators=(",", ":")))
+    months = months_to_fetch(gen, today, limit=8)     # po částech, ať nás Energy-Charts neblokuje
+    if not months:
+        return gen
+    print(f"Výroba ČR – měsíce ke stažení: {len(months)}")
+    for day, g in fetch_generation(months).items():
+        y = int(day[:4])
+        if y in gen:
+            gen[y][day] = g
+    for y, content in gen.items():
+        if content:
+            save_json(DATA / f"gen_{y}.json", content)
+    return gen
 
-    # --- Německo (denní průměry) ---
+
+def update_germany(today, tomorrow):
     de = {}
     for y in range(START.year, tomorrow.year + 1):
         f = DATA / f"gen_de_{y}.json"
         de[y] = json.loads(f.read_text()) if f.exists() else {}
-    de_months = set()
-    d = START
-    while d <= today:
-        if d.isoformat() not in de[d.year] or d >= today - dt.timedelta(days=3):
-            de_months.add((d.year, d.month))
-        d += dt.timedelta(days=1)
-    if de_months:
-        for day, g in fetch_germany(de_months).items():
-            y = int(day[:4])
-            if y in de:
-                de[y][day] = g
-        for y, content in de.items():
-            if content:
-                (DATA / f"gen_de_{y}.json").write_text(json.dumps(dict(sorted(content.items())), separators=(",", ":")))
-
-    for y, content in store.items():
+    months = months_to_fetch(de, today, limit=8)
+    if not months:
+        return de
+    print(f"Výroba DE – měsíce ke stažení: {len(months)}")
+    for day, g in fetch_germany(months).items():
+        y = int(day[:4])
+        if y in de:
+            de[y][day] = g
+    for y, content in de.items():
         if content:
-            ordered = dict(sorted(content.items()))
-            (DATA / f"ote_{y}.json").write_text(json.dumps(ordered, separators=(",", ":")))
+            save_json(DATA / f"gen_de_{y}.json", content)
+    return de
+
+
+def main():
+    today = dt.datetime.now(TZ).date()
+    tomorrow = today + dt.timedelta(days=1)
+    changed, store, gen_days, ok_prices = 0, {}, 0, True
+
+    # 1) ceny – nejdůležitější, ukládají se hned
+    try:
+        changed, store = update_prices(today, tomorrow)
+    except Exception as e:
+        ok_prices = False
+        print(f"::error::Aktualizace cen selhala: {e!r}")
+
+    # 2) výroba – doplňková data; chyba nesmí zastavit ceny
+    try:
+        gen = update_generation(today, tomorrow)
+        gen_days = sum(len(v) for v in gen.values())
+    except Exception as e:
+        warn(f"Výroba ČR (Energy-Charts) se nestáhla: {e!r} – zkusí se příště.")
+    try:
+        update_germany(today, tomorrow)
+    except Exception as e:
+        warn(f"Výroba DE (Energy-Charts) se nestáhla: {e!r} – zkusí se příště.")
+
     (DATA / "meta.json").write_text(json.dumps({
         "updated": dt.datetime.now(TZ).isoformat(timespec="minutes"),
         "changedDays": changed,
-        "genDays": sum(len(v) for v in gen.values()),
+        "genDays": gen_days,
     }))
-    print(f"Změněno dní: {changed}")
+    print(f"Změněno dní s cenami: {changed}")
+
+    # chybou (a e-mailem) končíme jen tehdy, když chybí dnešní ceny – to je skutečný problém
+    has_today = bool(store.get(today.year, {}).get(today.isoformat()))
+    if not ok_prices or not has_today:
+        print(f"::error::Chybí ceny pro dnešek ({today.isoformat()}). OTE může být nedostupné – zkusí se při dalším běhu.")
+        return 1
     return 0
 
 
